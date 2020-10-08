@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unrolled/secure"
 	"golang.org/x/crypto/acme/autocert"
+    _ "net/http/pprof"
 )
 
 const defaultHubURL = "/.well-known/mercure"
@@ -219,6 +220,7 @@ func basicAuthMiddleware(expectedLogin, expectedPassword string) func(next http.
 			if !ok || login != expectedLogin || password != expectedPassword {
 				w.Header().Add("WWW-Authenticate", `Basic realm="Mercure"`)
 				w.WriteHeader(http.StatusUnauthorized)
+
 				return
 			}
 

@@ -31,6 +31,7 @@ type Subscriber struct {
 	history             updateSource
 	live                updateSource
 	topicSelectorStore  *TopicSelectorStore
+	historySent         bool
 }
 
 // NewSubscriber creates a new subscriber.
@@ -51,10 +52,12 @@ func NewSubscriber(lastEventID string, tss *TopicSelectorStore) *Subscriber {
 		out:                make(chan *Update),
 		disconnected:       make(chan struct{}),
 		topicSelectorStore: tss,
+		historySent:        true,
 	}
 
 	if lastEventID != "" {
 		s.history.in = make(chan *Update)
+		s.historySent = false
 	}
 
 	return s
@@ -69,6 +72,7 @@ func (s *Subscriber) start() {
 		case u, ok := <-s.history.in:
 			if !ok {
 				s.history.in = nil
+
 				break
 			}
 			if s.CanDispatch(u) {
@@ -85,6 +89,7 @@ func (s *Subscriber) start() {
 		case s.outChan() <- s.nextUpdate():
 			if len(s.history.buffer) > 0 {
 				s.history.buffer = s.history.buffer[1:]
+
 				break
 			}
 
@@ -105,6 +110,7 @@ func (s *Subscriber) outChan() chan<- *Update {
 	if len(s.live.buffer) > 0 || len(s.history.buffer) > 0 {
 		return s.out
 	}
+
 	return nil
 }
 
@@ -116,6 +122,7 @@ func (s *Subscriber) nextUpdate() *Update {
 		if len(s.history.buffer) > 0 {
 			return s.history.buffer[0]
 		}
+
 		return nil
 	}
 
@@ -138,14 +145,15 @@ func (s *Subscriber) Dispatch(u *Update, fromHistory bool) bool {
 	select {
 	case <-s.disconnected:
 		close(s.live.in)
-		return false
 
+		return false
 	default:
 	}
 
 	select {
 	case <-s.disconnected:
 		close(s.live.in)
+
 		return false
 
 	case in <- u:
@@ -176,11 +184,13 @@ func (s *Subscriber) Disconnect() {
 func (s *Subscriber) CanDispatch(u *Update) bool {
 	if !canReceive(s.topicSelectorStore, u.Topics, s.Topics, true) {
 		log.WithFields(createFields(u, s)).Debug("Subscriber has not subscribed to this update")
+
 		return false
 	}
 
 	if u.Private && (s.Claims == nil || s.Claims.Mercure.Subscribe == nil || !canReceive(s.topicSelectorStore, u.Topics, s.Claims.Mercure.Subscribe, true)) {
 		log.WithFields(createFields(u, s)).Debug("Subscriber not authorized to receive this update")
+
 		return false
 	}
 
